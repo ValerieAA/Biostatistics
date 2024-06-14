@@ -1,0 +1,17 @@
+## install.packages("palmerpenguins")
+library(palmerpenguins)
+library(tidyverse)
+penguins
+penguins_nafree <- penguins %>% 
+	drop_na()
+penguins_nafree
+penguins_nafree %>% 
+	group_by(species) %>% 
+	summarise(avgerage_bill_length = mean(bill_length_mm))
+penguins_nafree %>%
+	filter(., sex != "male") %>%
+	select(c("species", "island", "body_mass_g")) %>%
+	group_by(species, island) %>%
+	summarise(total_mass_g = sum(body_mass_g)) %>%
+	pivot_wider(names_from = c(island), values_from = total_mass_g)
+
