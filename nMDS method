@@ -1,0 +1,222 @@
+
+# nMDS in R using metaMDS() on the palmerpenguins data set ----------------
+
+
+library(vegan)
+# we should be used to loading these packages by now :-)
+
+library(tidyverse) 
+library(palmerpenguins)
+
+# getting rid of NAs
+penguins_nafree <- penguins %>% drop_na ()
+library(GGally) # introducing a new package GGally, please install then open
+
+penguins_nafree %>% 
+  ggpairs(columns = 3:6) # specifies to only use numeric variables found in 
+# columns 3 – 6 of the penguins_nafree data set
+penguins_nafree %>% 
+  ggpairs(columns = 3:6, aes(colour = species))  
+penguins_nafree %>% 
+  ggpairs(columns = 3:6, aes(colour = sex))  
+
+# This is the code for the minShift function explained above
+minShift <- function(x) {x + abs(min(x))}
+
+# we are creating a new object call nmds_penguins where we are preparing
+# our non-community structure data for metaMDS()
+nmds_penguins <- penguins_nafree %>%                  # use the NA free data set
+  select(where(is.numeric), -year) %>% # year makes no sense here so we remove it
+  scale() %>%                                              # scale the variables
+  apply(. , 2, minShift)  # apply our minShift function to the variables/columns
+
+nmds_penguins_results <- metaMDS(comm = nmds_penguins, # Define the data to use 
+                                 distance = "euclidean",     # Specify distance
+                                 k = 2, # can we reduce to 2D for easy interpretation?
+                                 try = 100, trymax = 100, # Number of random starts     
+                                 autotransform=FALSE, # turn off default for community data
+                                 noshare=FALSE, # turn off default for community data
+                                 wascores=TRUE) # turn off default for community data
+
+nmds_penguins_results # prints summary of results
+names (nmds_penguins_results)
+plot (nmds_penguins_results)
+
+### creating a nMDS plot using ggplot2
+
+## Recommendation is to run each line of code below and then view either the
+## sample_scores or variable_scores objects to see what it is doing at each step
+
+# First create a data frame of the scores from the samples
+sample_scores <- as.data.frame(nmds_penguins_results$points)
+
+# Now add the extra species and sex information columns
+# the line of code below says combine the current sample_scores object with
+# the first column of the penguins_nafree data set and store it in an object
+# called sample_scores
+sample_scores <- cbind(sample_scores, penguins_nafree[, 1])
+# this next line of code says add a column header to the third column (the new
+# column) of the sample_scores data frame; call it species
+# NOTE: check the sample_scores object you have created first. If it already 
+# has species as column header, you do not need to run the next line of code
+colnames(sample_scores)[3] <- "species"
+# based on the first two, can you work out what these two lines of code say?
+sample_scores <- cbind(sample_scores, penguins_nafree[, 7])
+colnames(sample_scores)[4] <- "sex"
+
+# Next, we can create a data frame of the scores for variable data (species)
+variable_scores <- as.data.frame(nmds_penguins_results$species) 
+
+# Add a column equivalent to the row name to create variable labels on our plot
+variable_scores$variable <- rownames(variable_scores)
+
+library(viridis)
+
+ggplot() +
+  # the data points for each sample using the scores created in metaMDS function
+  geom_point(data = sample_scores, aes(x = MDS1, y = MDS2, 
+                                       color = species), size = 3) +
+  # create more appropriate x and y axis labels 
+  xlab("nMDS1") +
+  ylab("nMDS2") +
+  # what colours would we like?
+  scale_color_manual(values = inferno(15)[c(3, 8, 11)],
+                     name = "Species") +
+  # add stress label to the plot, indicating the label position
+  annotate(geom = "label", x = -1.75, y = 2.75, size = 6,
+           label = paste("Stress: ", round(nmds_penguins_results$stress, digits = 3))) +
+  theme_minimal() + # choosing a theme
+  theme(legend.position = "right",
+        text = element_text(size = 10)) # position and size of legend
+
+# Stress plot/scree plot for nMDS
+
+library(goeveg) # needed for dimcheckMDS to create scree plot. Install and open
+
+dimcheckMDS(penguins_nafree[ , c(3:6)], # We are specifying columns 3-6 again 
+            # using subsetting brackets [] as this is the data we used for the nMDS
+            distance = "euclidean", # distance measure used for metaMDS analysis
+            k = 3    # maximum number of dimensions, default is 6 but we only
+            # have 4 original variables here so more than 3 does not make sense!
+)
+
+#confusingly, the Shepard diagram is called stressplot in R!
+stressplot(nmds_penguins_results)
+
+
+# nMDS in R using metaMDS() with community structure data -----------------
+
+
+# loading packages below is only necessary if you're starting a new R session
+library(vegan) 
+library(tidyverse)
+
+orders <- read_csv("condensed_order.csv")
+# Note: for this code to work you need have downloaded this csv file from CANVAS 
+# and saved it into your working directory
+
+# as you know, it’s always a good idea to check the data has 
+# loaded correctly in R before proceeding further
+glimpse(orders) 
+
+dim(orders) # how many variables and how many samples are there in this data set?
+
+# we can see this data set contains eight different animal orders, 
+# location coordinates, type of aquatic system, and elevation. 
+# We will consider the eight animal orders and the aquaticSiteType columns only.
+
+library(GGally) # only necessary if you're starting a new R session
+
+# pairs plot
+orders %>% 
+  ggpairs(columns = 4:11) # specifies to only use variables from columns 4-11 in the orders data set
+
+# or we can add on the river and lake system information also!
+
+# to do this, we first need to convert aquaticSiteType into a factor variable
+orders$aquaticSiteType <- as.factor(orders$aquaticSiteType)
+
+orders %>% 
+  ggpairs(columns = 4:11, aes(colour = aquaticSiteType),
+          # code below just makes correlation coefs font smaller so we can read it all!
+          upper = list(continuous = wrap("cor", size = 2)))
+
+library(goeveg) #only necessary if you're starting a new R session
+
+dimcheckMDS(orders[ , 4:11], #data being used. Here we have specified columns
+            # 4-11 again as this relates to the animal order data we used for the nMDS
+            distance = "bray", #dissimilarity index used for metaMDS analysis
+            k = 6, #maximum number of dimensions
+            trymax = 20, #maximum number of random configuration starts for 
+            #iterative search of the best solution
+)
+
+# run the analysis using chosen distance metric
+# because our chosen distance metric is BC, we do not need to specify distance
+# as BC is the default
+nmds_minv_results <- metaMDS(comm = orders[ , 4:11],   # Define the community data 
+                             k = 2,              # our stress plot showed this was ok
+                             try = 100, trymax = 100)       # Number of random starts 
+# no need to specify autotransform = , noshare = , or wascores = at all in our 
+# code because for community data such as this, we can use the default settings.
+
+# We can get the same outputs as we did for the penguin data set
+# Remember what this all tells us? Look back over previous notes if required
+nmds_minv_results # print results
+#run this code to find this information:
+nmds_minv_results$ndim                        # how many nMDS axes were created?
+nmds_minv_results$converged                 # did it find a convergent solution?
+nmds_minv_results$points                 # scores for each location (as samples)
+nmds_minv_results$species          # scores for each animal order (as variables)
+
+plot(nmds_minv_results)
+
+### creating an nMDS plot using ggplot2
+
+## Recommendation is to run each line of code below and then view either the
+## data_scores or species_scores objects to see what it is doing at each step
+
+#First create a data frame of the scores from the samples
+data_scores <- as.data.frame(nmds_minv_results$points)
+
+# Now add the extra aquaticSiteType column
+# the line of code below says combine the current data_scores object with
+# the 14th column of the orders data set and store it in an object
+# called data_scores
+data_scores <- cbind(data_scores, orders[, 14])
+# this next line of code says add a column header to the third column (the new
+# column) of the data_scores data frame; call it aquaticSiteType
+# NOTE: check the sample_scores object you have created first. If it already 
+# has aquaticSiteType as column header, you do not need to run the next line of code
+colnames(data_scores)[3] <- "aquaticSiteType"
+
+# Next, we can create a data frame of the scores for species data
+species_scores <- as.data.frame(nmds_minv_results$species)
+
+# Add a column equivalent to the row name to create species labels for us to plot
+species_scores$species <- rownames(species_scores)
+
+# Now we can build the plot!
+ggplot() +
+  # the text labels for each species group
+  geom_text(data = species_scores, aes(x = MDS1, y = MDS2, label = species),
+            alpha = 0.5, size = 6) +
+  # the data points for each sample, using the scores created in metaMDS function
+  geom_point(data = data_scores, aes(x = MDS1, y = MDS2, 
+                                     color = aquaticSiteType), size = 3) +
+  # create more appropriate x and y axis labels
+  xlab("nMDS1") +
+  ylab("nMDS2") +
+  # what colours would we like? (we only need two colours here)
+  scale_color_manual(values = inferno(15)[c(3, 11)],
+                     name = "Aquatic System Type") +
+  # add stress label to the plot, indicating the label position and 3sf
+  annotate(geom = "label", x = -1.5, y = 1.5, size = 6,
+           label = paste("Stress: ", round(nmds_minv_results$stress, digits = 3))) +
+  theme_minimal() + # choosing a theme
+  theme(legend.position = "right",
+        text = element_text(size = 10)) # position and size of legend
+
+#Shepard diagram
+stressplot(nmds_minv_results)
+
